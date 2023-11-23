@@ -105,6 +105,8 @@ pub use input_stream::InputStream;
 pub use lexer::{BaseLexer, Lexer};
 #[doc(inline)]
 pub use parser::{BaseParser, ListenerId, Parser};
+use spark::sparksqllistener::{self, SparkSqlListener};
+use spark::sparksqlparser::SparkSqlParserContextType;
 #[doc(inline)]
 pub use token_source::TokenSource;
 //extern crate uuid;
@@ -113,6 +115,7 @@ pub use prediction_context::PredictionContextCache;
 
 #[doc(inline)]
 pub use prediction_mode::PredictionMode;
+use tree::{ErrorNode, ParseTreeListener};
 
 #[doc(hidden)]
 pub mod atn_config;
@@ -177,6 +180,10 @@ pub mod vocabulary;
 //#[cfg(test)]
 // tests are either integration tests in "tests" foulder or unit tests in some modules
 
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::f32::consts::PI;
+use std::ops::{Add, Deref};
 use std::rc::Rc;
 /// Stable workaround for CoerceUnsized
 // #[doc(hidden)]
@@ -243,24 +250,36 @@ where
     }
 }
 
-
-
 extern crate console_error_panic_hook;
-use std::panic;
+use std::{
+    any::{Any, TypeId},
+    panic,
+};
 
 use crate::common_token_stream::CommonTokenStream;
 use crate::error_listener::ErrorListener;
+// use crate::hive::hivesqlparserlistener::HiveSqlParserListener;
 use crate::recognizer::Recognizer;
 use crate::token_factory::CommonTokenFactory;
 use std::time::{Duration, Instant};
 
-mod hive;
-use crate::hive::hivesqllexer::HiveSqlLexer;
-use crate::hive::hivesqlparser::HiveSqlParser;
+mod spark;
+use crate::spark::sparksqllexer::SparkSqlLexer;
+use crate::spark::sparksqlparser::SparkSqlParser;
+
+struct ExprErrorListener {
+    errors: Rc<RefCell<Vec<String>>>,
+}
+
+impl ExprErrorListener {
+    fn new(errors: Rc<RefCell<Vec<String>>>) -> Self {
+        ExprErrorListener { errors }
+    }
+}
 
 
-struct ExprErrorListener;
 impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for ExprErrorListener {
+
     fn syntax_error(
         &self,
         _recognizer: &T,
@@ -270,10 +289,13 @@ impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for ExprErrorListener {
         msg: &str,
         _error: Option<&crate::errors::ANTLRError>,
     ) {
-        println!(
-            "Syntax error at line {}, position {}: {}",
+        let mut d = self.errors.deref().borrow_mut();
+        let err_msg = format!(
+            "Syntax Error: line {}, position {}, message: {}",
             line, char_position_in_line, msg
         );
+        println!("{}", err_msg.clone());
+        d.push(err_msg);
     }
 }
 
@@ -281,33 +303,37 @@ extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn main_demo(sql: &str) {
+pub fn main_demo(sql: &str) -> String {
     println!("RunDemo");
-    let start = Instant::now();
+    // let start = Instant::now();
     self::parse_sql(sql);
-    let dur = start.elapsed();
-    println!("Duration")
-}
+    // let dur = start.elapsed();
+    println!("Duration {:#?}", "dur");
+    "Spark Parse".to_string()
+} 
 
-pub fn parse_sql(sql: &str) {
+
+pub fn parse_sql(sql: &str) -> String {
     let input = InputStream::new(sql);
-    let lexer = HiveSqlLexer::new(input);
+    let lexer = SparkSqlLexer::new(input);
     let tokens: CommonTokenStream<'_, _> = CommonTokenStream::new(lexer);
-    let mut parser = HiveSqlParser::new(tokens);
+    let mut parser = SparkSqlParser::new(tokens);
     parser.remove_error_listeners();
-    parser.add_error_listener(Box::new(ExprErrorListener));
-    let result = parser.program().unwrap();
+    let errors = Rc::new(RefCell::new(vec![]));
+    parser.add_error_listener(Box::new(ExprErrorListener::new(errors.clone())));
+    parser.program().unwrap();
+    let error_vec = errors.deref().borrow();
+    format!("[\"{:?}\"]", error_vec.join("\",\""))   
 }
-
 use std::sync::atomic::AtomicIsize;
 
 #[wasm_bindgen]
 pub fn abc() {
-    let input = InputStream::new("sql");
-    let lexer = HiveSqlLexer::new(input);
-    let tokens: CommonTokenStream<'_, _> = CommonTokenStream::new(lexer);
-    // let a = AtomicIsize::new(-1);
-    // parse_sql(sql)
+    // let input = InputStream::new("sql");
+    // let lexer = HiveSqlLexer::new(input);
+    // // lexer.channel
+    // let tokens: CommonTokenStream<'_, _> = CommonTokenStream::new(lexer);
+    //
 }
 
 #[wasm_bindgen]
@@ -333,7 +359,6 @@ pub fn get_sql(file_path: &str) -> String {
     file.to_uppercase()
 }
 
-
 use std::fmt; // 导入 `fmt`
 
 // 带有两个数字的结构体。推导出 `Debug`，以便与 `Display` 的输出进行比较。
@@ -348,8 +373,6 @@ impl fmt::Display for MinMax {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,13 +380,18 @@ mod tests {
     #[test]
     fn it_works() {
         let result = add(2, 2);
-        abc();
+        test_parse_sql();
         println!("Hello {}", result);
         assert_eq!(result, 4);
     }
 
     fn test_parse_sql() {
         let sql = get_sql("/Users/taorui/workspace/bigdata-sql-parser/sql/large.sql");
-        main_demo(sql.as_str());
+        let res = main_demo(sql.as_str());
+        print!("Run RES {} ", res);
     }
+}
+
+fn testccc(v: &mut Vec<&str>) {
+    v.push("2")
 }

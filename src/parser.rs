@@ -672,7 +672,7 @@ where
                     println!()
                 }
                 println!("Decision {}:", dfa.decision);
-                print!("{}", dfa.to_string(self.get_vocabulary()));
+                // print!("{}", self.get_vocabulary());
                 seen_one = true;
             }
         }

@@ -288,9 +288,7 @@ impl<'input, T: TokenSource<'input>> IntStream for UnbufferedTokenStream<'input,
 
     #[inline(always)]
     fn size(&self) -> isize {
-        let mut i: isize = 0;
-        i += self.tokens.len() as isize;
-        i.abs()
+        self.tokens.len() as isize
     }
 
     fn get_source_name(&self) -> String {
